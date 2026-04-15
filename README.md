@@ -31,22 +31,22 @@ The application is fully containerized, meaning you don't need to install Python
 
 ### 1. Clone the Repository
 Open your terminal or command prompt and clone the project:
-`bash
+```
 git clone https://github.com/swarpatel/fuelwatch_dashboard.git
 cd fuelwatch_dashboard
-`
+```
 
 ### 2. Build the Docker Image
 Run the following command in the directory containing the `Dockerfile`:
-`bash
+```
 docker build -t fuel-dash .
-`
+```
 
 ### 3. Run the Container
 Start the container and bind it to your local machine for secure access:
-`bash
+```
 docker run -d -p 127.0.0.1:8501:8501 --name my-fuel-dash fuel-dash
-`
+```
 *Note: Binding to `127.0.0.1` ensures the dashboard is only accessible from your local machine, adding a layer of security.*
 
 ### 4. Access the Dashboard
@@ -60,19 +60,19 @@ Open your web browser and navigate to:
 If you want to modify the code (`app.py`) and see changes instantly without rebuilding the Docker image, run the container with a volume mount:
 
 **Windows (Command Prompt):**
-`cmd
+```
 docker run -p 127.0.0.1:8501:8501 -v "%cd%":/app fuel-dash
-`
+```
 
 **Mac/Linux/PowerShell:**
-`bash
+```
 docker run -p 127.0.0.1:8501:8501 -v "${PWD}":/app fuel-dash
-`
+```
 Save your changes in your code editor, and Streamlit will automatically prompt you to rerun the app in the browser.
 
 ## 🛑 Stopping the Application
 To stop the running container:
-`bash
+```
 docker stop my-fuel-dash
 docker rm my-fuel-dash
-`
+```
