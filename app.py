@@ -5,6 +5,8 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
+import datetime
+import pytz
 
 st.set_page_config(layout="wide", page_title="WA Fuel Dashboard")
 
@@ -23,6 +25,7 @@ hide_st_style = """
             </style>
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
+                
 
 # Initialize session state for the radius and ZIP
 if "radius_km" not in st.session_state:
@@ -43,13 +46,14 @@ def clear_zip():
     st.session_state.radius_km = None
 
 @st.cache_data(ttl=3600)
-def fetch_fuel_data(product_id=1, river_side="All"):
+def fetch_fuel_data(product_id=1, river_side="All", day="today"):
+    # Append the &Day parameter to the native FuelWatch URLs
     if river_side == "North":
-        url = f"https://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS?Product={product_id}&Region=25"
+        url = f"https://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS?Product={product_id}&Region=25&Day={day}"
     elif river_side == "South":
-        url = f"https://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS?Product={product_id}&Region=26"
+        url = f"https://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS?Product={product_id}&Region=26&Day={day}"
     else:
-        url = f"https://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS?Product={product_id}&StateRegion=98"
+        url = f"https://www.fuelwatch.wa.gov.au/fuelwatch/fuelWatchRSS?Product={product_id}&StateRegion=98&Day={day}"
         
     feed = feedparser.parse(url)
     
@@ -114,6 +118,38 @@ if suburb_input:
         )
         filtered_df = filtered_df[filtered_df["distance"] <= st.session_state.radius_km]
 
+# Perth is in the AWST timezone
+perth_tz = pytz.timezone('Australia/Perth')
+current_time = datetime.datetime.now(perth_tz)
+publish_time = current_time.replace(hour=14, minute=30, second=0, microsecond=0) # FuelWatch publishes tomorrow's prices at 2:30 PM
+
+# Only run this logic if it is past 2:30 PM in Perth
+if current_time >= publish_time:
+    # Fetch tomorrow's data
+    df_tomorrow = fetch_fuel_data(fuel_type[1], river_side, day="tomorrow")
+    
+    if not df_tomorrow.empty and not filtered_df.empty:
+        # Calculate the lowest price matching the user's filters
+        today_min = filtered_df['price'].min()
+        
+        # Apply the same brand filter to tomorrow's data if active
+        filtered_tomorrow = df_tomorrow.copy()
+        if brands:
+            filtered_tomorrow = filtered_tomorrow[filtered_tomorrow["brand"].isin(brands)]
+            
+        if not filtered_tomorrow.empty:
+            tomorrow_min = filtered_tomorrow['price'].min()
+            
+            diff = round(tomorrow_min - today_min, 1)
+            
+            # Display dynamic UI alerts based on the price difference
+            if diff > 0:
+                st.error(f"🚨 **FILL UP TODAY!** The cheapest price in this area is jumping by {diff} c/L tomorrow.")
+            elif diff < 0:
+                st.success(f"⏳ **WAIT!** The cheapest price in this area is dropping by {abs(diff)} c/L tomorrow.")
+            else:
+                st.info("⚖️ **PRICES STABLE:** The lowest price in this area remains exactly the same tomorrow.")
+                
 col1, col2 = st.columns([1, 2])
 selected_station = None
 
@@ -203,4 +239,4 @@ with col2:
                 icon=folium.Icon(color=color)
             ).add_to(m)
             
-        st_folium(m, use_container_width=True, height=800, returned_objects=[])
+        st_folium(m, use_container_width=True, height=950, returned_objects=[])
