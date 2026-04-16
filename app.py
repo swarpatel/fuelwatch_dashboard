@@ -76,7 +76,16 @@ def get_coordinates(suburb):
     return (location.latitude, location.longitude) if location else None
 
 st.sidebar.header("Filters")
-fuel_type = st.sidebar.selectbox("Fuel Type", {"ULP": 1, "PULP": 2, "Diesel": 4}.items(), format_func=lambda x: x[0])
+fuel_options = {
+    "ULP": 1, 
+    "PULP": 2, 
+    "Diesel": 4,
+    "Brand Diesel": 11,
+    "LPG": 5,
+    "98 RON": 6,
+    "E85": 10
+}
+fuel_type = st.sidebar.selectbox("Fuel Type", fuel_options.items(), format_func=lambda x: x[0])
 river_side = st.sidebar.radio("River Side", ["All", "North", "South"])
 
 df = fetch_fuel_data(fuel_type[1], river_side)
