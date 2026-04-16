@@ -134,30 +134,42 @@ publish_time = current_time.replace(hour=14, minute=30, second=0, microsecond=0)
 
 # Only run this logic if it is past 2:30 PM in Perth
 if current_time >= publish_time:
-    # Fetch tomorrow's data
     df_tomorrow = fetch_fuel_data(fuel_type[1], river_side, day="tomorrow")
     
     if not df_tomorrow.empty and not filtered_df.empty:
-        # Calculate the lowest price matching the user's filters
-        today_min = filtered_df['price'].min()
-        
-        # Apply the same brand filter to tomorrow's data if active
+        # Merge tomorrow's price into the main dataframe
+        tomorrow_subset = df_tomorrow[['brand', 'address', 'price']].rename(columns={'price': 'price_tomorrow'})
+        filtered_df = pd.merge(filtered_df, tomorrow_subset, on=['brand', 'address'], how='left')
+
+        # Create filtered dataframe for tomorrow to find the true lowest
         filtered_tomorrow = df_tomorrow.copy()
+
         if brands:
             filtered_tomorrow = filtered_tomorrow[filtered_tomorrow["brand"].isin(brands)]
             
+        if center and st.session_state.radius_km:
+            filtered_tomorrow["distance"] = filtered_tomorrow.apply(
+                lambda row: geodesic(center, (row["latitude"], row["longitude"])).km, axis=1
+            )
+            filtered_tomorrow = filtered_tomorrow[filtered_tomorrow["distance"] <= st.session_state.radius_km]
+            
         if not filtered_tomorrow.empty:
-            tomorrow_min = filtered_tomorrow['price'].min()
+            today_min = filtered_df['price'].min()
+            
+            # Find the exact station with the lowest price tomorrow
+            tomorrow_min_idx = filtered_tomorrow['price'].idxmin()
+            best_tomorrow = filtered_tomorrow.loc[tomorrow_min_idx]
+            tomorrow_min = best_tomorrow['price']
             
             diff = round(tomorrow_min - today_min, 1)
+            station_info = f"**{best_tomorrow['brand']} - {best_tomorrow['location']}** ({tomorrow_min} c/L)"
             
-            # Display dynamic UI alerts based on the price difference
             if diff > 0:
-                st.error(f"🚨 **FILL UP TODAY!** The cheapest price in this area is jumping by {diff} c/L tomorrow.")
+                st.error(f"🚨 **FILL UP TODAY!** The cheapest price tomorrow will jump to {station_info}, an increase of {diff} c/L.")
             elif diff < 0:
-                st.success(f"⏳ **WAIT!** The cheapest price in this area is dropping by {abs(diff)} c/L tomorrow.")
+                st.success(f"⏳ **WAIT!** The cheapest price tomorrow will drop to {station_info}, a saving of {abs(diff)} c/L.")
             else:
-                st.info("⚖️ **PRICES STABLE:** The lowest price in this area remains exactly the same tomorrow.")
+                st.info(f"⚖️ **PRICES STABLE:** The cheapest price tomorrow remains {station_info}.")
                 
 col1, col2 = st.columns([1, 2])
 selected_station = None
@@ -173,8 +185,14 @@ with col1:
         
         display_df = filtered_df.sort_values("price").reset_index(drop=True)
         
+        # Dynamically build the columns list based on whether tomorrow's data exists
+        display_cols = ["brand", "price"]
+        if "price_tomorrow" in display_df.columns:
+            display_cols.append("price_tomorrow")
+        display_cols.extend(["location", "address"])
+        
         event = st.dataframe(
-            display_df[["brand", "price", "location", "address"]], 
+            display_df[display_cols], # Use the dynamic columns list
             use_container_width=True, 
             height=500,
             hide_index=True,
